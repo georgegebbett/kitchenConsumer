@@ -1,14 +1,17 @@
 import threading
 import tkinter as tk
+from tkinter import ttk
 import json
 import requests
 import os
 import sys
 import evdev
 import yaml
+from time import sleep
 
 from key_grab import grab_key_in_thread
 from hotkey_utils import get_hotkey_location
+from GrocyItem import GrocyItem
 
 # import keyboard
 
@@ -16,32 +19,42 @@ if os.environ.get('DISPLAY', '') == '':
     print('no display found. Using :0.0')
     os.environ.__setitem__('DISPLAY', ':0.0')
 
+test_mode = True
+config_file_name = "config.yaml"
+
+
+if test_mode:
+    config_file_name = "config_demo.yaml"
+
 # open and read the config file
-with open('/home/pi/barcode/kitchenConsumer/config.yaml', 'r') as config:
+with open(f'/home/pi/barcode/kitchenConsumer/{config_file_name}', 'r') as config:
     try:
         options = yaml.safe_load(config)
     except yaml.YAMLError as err:
         print(err)
 
 # set Grocy variables
-grocy_config_object = options['grocy']
+grocy_config = options['grocy']
 
 # Other misc variables
 runFullscreen = options['fullscreen']
 LARGE_FONT = ("Verdana", 25)
+LARGER_FONT = ("Verdana", 50)
 
 hotkey_items = options['hotkey_items']
 
 print(hotkey_items)
 
 # Get the items from Grocy
-headers = {'GROCY-API-KEY': grocy_config_object["api_key"]}
-itemRes = requests.get(grocy_config_object["base_url"] + "objects/products", headers=headers)
+headers = {'GROCY-API-KEY': grocy_config["api_key"]}
+itemRes = requests.get(grocy_config["base_url"] + "objects/products", headers=headers)
 
 items = []
 
+print(itemRes.content)
+
 for item in json.loads(itemRes.content):
-    items.append({"id": item["id"], "name": item["name"]})
+    items.append(GrocyItem(int(item["id"]), item["name"]))
 
 print(items)
 
@@ -55,8 +68,12 @@ def get_hotkey_item(hotkey_position):
 
 
 def get_item_by_id(item_id):
+    print(type(item_id))
+    print(type(items[0].id))
+
     for item in items:
-        if item["id"] == item_id:
+        print(f"Looking for {item_id} - this one is {item.id}")
+        if item.id == item_id:
             return item
 
     return -1
@@ -81,8 +98,10 @@ class CupboardConsumer(tk.Tk):
 
         self.frames = {}
 
+        self.last_keypress = None
+
         for F in (
-                SplashScreen, ItemsPage, QuantityPage, ConsumeResultPage):
+                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -112,15 +131,6 @@ class SplashScreen(tk.Frame):
         label = tk.Label(self, text="Cupboard Consumer\nLoading...", font=LARGE_FONT)
         label.grid(column=0, row=0, sticky='NSEW')
 
-
-def set_numlock():
-    ui = evdev.UInput()
-    ui.write(evdev.ecodes.EV_KEY, evdev.ecodes.KEY_A, 1)
-    ui.write(evdev.ecodes.EV_KEY, evdev.ecodes.KEY_A, 0)
-    ui.syn()
-    ui.close()
-
-
 class ItemsPage(tk.Frame):
 
     def __init__(self, parent, controller):
@@ -128,15 +138,17 @@ class ItemsPage(tk.Frame):
         self.keyName = tk.StringVar()
         self.controller = controller
         self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=2)
+        self.grid_rowconfigure(1, weight=1)
 
-        label = tk.Label(self, text="Scan an item or select a hotkey", font=LARGE_FONT)
+        label = tk.Label(self, text="Scan an item or select a hotkey", font=LARGER_FONT, wraplength=1000)
         label.grid(column=0, row=0)
 
         label = tk.Label(self, text="Press Ctrl to access options", font=LARGE_FONT)
         label.grid(column=0, row=1, sticky='EW')
 
-        label = tk.Label(self, textvariable=self.keyName, font=LARGE_FONT)
-        label.grid(column=0, row=2, sticky='EW')
+        # label = tk.Label(self, textvariable=self.keyName, font=LARGE_FONT)
+        # label.grid(column=0, row=2, sticky='EW')
 
         self.key_mapping = {
             29: self.open_options_screen
@@ -144,17 +156,23 @@ class ItemsPage(tk.Frame):
 
     def handle_hotkey(self, hotkey_position):
         try:
-            selected_item = get_hotkey_item(hotkey_position)
-            item_name = selected_item["name"]
+            selected_item: GrocyItem = get_hotkey_item(hotkey_position)
             print(selected_item)
+            item_name = selected_item.name
             self.keyName.set(item_name)
+            self.open_consume_option_screen(selected_item)
         except IndexError:
             self.keyName.set("Key not configured")
 
     def open_options_screen(self):
-        self.controller.show_frame(QuantityPage)
+        self.controller.show_frame(OptionPage)
+
+    def open_consume_option_screen(self, item: GrocyItem):
+        self.controller.show_frame(ConsumeOptionsPage)
+        self.controller.frames[ConsumeOptionsPage].on_raise(item)
 
     def interpret_keypress(self, key, code):
+        print("Item page handler")
         hotkey_location = get_hotkey_location(code)
         if hotkey_location == -1:
             try:
@@ -165,7 +183,7 @@ class ItemsPage(tk.Frame):
             self.handle_hotkey(hotkey_location)
 
 
-class QuantityPage(tk.Frame):
+class OptionPage(tk.Frame):
 
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
@@ -242,6 +260,7 @@ class QuantityPage(tk.Frame):
         self.controller.show_frame(ItemsPage)
 
     def interpret_keypress(self, key, code):
+        print("Option page handler")
         self.quantity.set(code)
         try:
             self.key_mapping[code]()
@@ -280,18 +299,70 @@ class QuantityPage(tk.Frame):
         #     openResultPage(json.loads(consumeRes.text)["error_message"], self.quantity.get(), False, self.controller)
 
 
-class ConsumeResultPage(tk.Frame):
+class ConsumeOptionsPage(tk.Frame):
 
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         self.controller = controller
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
         self.success = tk.BooleanVar()
-        self.message = tk.StringVar()
+        self.item = None
+        self.item_name = tk.StringVar()
+        self.quantity = tk.IntVar()
+        self.quantity_string = tk.StringVar()
 
-        self.label = tk.Label(self, textvariable=self.message, font=LARGE_FONT, wraplength='320')
+        self.label = tk.Label(self, textvariable=self.item_name, font=LARGER_FONT, wraplength='1020')
         self.label.grid(column=0, row=0, sticky='NSEW')
+
+        self.label = tk.Label(self, text="Enter a quantity or scan another item", font=LARGE_FONT, wraplength='320')
+        self.label.grid(column=0, row=1, sticky='NSEW')
+
+        self.label = tk.Label(self, textvariable=self.quantity_string, font=LARGE_FONT, wraplength='320')
+        self.label.grid(column=0, row=2, sticky='NSEW')
+
+        self.progress_bar = ttk.Progressbar(self, mode='determinate', orient='horizontal')
+        self.progress_bar.grid(column=0, row=3, sticky='NSEW')
+
+        self.progress_thread = None
+
+    def on_raise(self, item: GrocyItem):
+        self.progress_bar["value"] = 0
+        self.item = item
+        self.item_name.set(item.name)
+        self.quantity.set(1)
+        self.quantity_string.set(f"Quantity: {self.quantity.get()}")
+        self.progress_thread = threading.Thread(target=self.progress)
+
+        self.progress_thread.start()
+
+    def progress(self):
+        t = threading.currentThread()
+        while getattr(t, "do_run", True):
+            self.progress_bar["value"] += 2
+            sleep(0.05)
+            if self.progress_bar["value"] >= 100:
+                self.controller.show_frame(ItemsPage)
+                self.do_consume(self.item.id, self.quantity.get())
+                t.join()
+
+    def interpret_keypress(self, key, code):
+        print("Consume option page handler")
+        if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
+            self.progress_thread.do_run = False
+            self.quantity.set(self.quantity.get() + 1)
+            self.quantity_string.set(f"Quantity: {self.quantity.get()}")
+            self.progress_bar["value"] = 0
+            self.progress_thread.do_run = True
+
+    def do_consume(self, item_id: int, quantity: int):
+        headers = {'GROCY-API-KEY': grocy_config["api_key"]}
+        consume_url = f"{grocy_config['base_url']}stock/products/{item_id}/consume"
+        res = requests.post(consume_url, json={"amount": quantity}, headers=headers)
+        print(res)
 
 
 # def openQuantityPage(item, controller):

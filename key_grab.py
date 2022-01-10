@@ -11,4 +11,5 @@ def grab_key_in_thread(app_instance):
 
         if event.type == evdev.ecodes.EV_KEY and event.value == 1:
             # app_instance.active_frame.interpret_keypress(evdev.ecodes.KEY[int(event.code)], event.code, True)
+            print(app_instance.active_frame)
             app_instance.active_frame.interpret_keypress(str(event.code), event.code)
