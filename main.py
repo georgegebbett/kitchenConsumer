@@ -4,14 +4,13 @@ from tkinter import ttk
 import json
 import requests
 import os
-import sys
-import evdev
 import yaml
 from time import sleep
 
 from key_grab import grab_key_in_thread
 from hotkey_utils import get_hotkey_location
-from GrocyItem import GrocyItem
+from grocy.GrocyItem import GrocyItem
+from grocy.GrocyConfig import GrocyConfig
 
 # import keyboard
 
@@ -21,7 +20,6 @@ if os.environ.get('DISPLAY', '') == '':
 
 test_mode = True
 config_file_name = "config.yaml"
-
 
 if test_mode:
     config_file_name = "config_demo.yaml"
@@ -35,6 +33,8 @@ with open(f'/home/pi/barcode/kitchenConsumer/{config_file_name}', 'r') as config
 
 # set Grocy variables
 grocy_config = options['grocy']
+grocy_config_object = GrocyConfig(grocy_config)
+print(grocy_config_object)
 
 # Other misc variables
 runFullscreen = options['fullscreen']
@@ -46,17 +46,18 @@ hotkey_items = options['hotkey_items']
 print(hotkey_items)
 
 # Get the items from Grocy
-headers = {'GROCY-API-KEY': grocy_config["api_key"]}
-itemRes = requests.get(grocy_config["base_url"] + "objects/products", headers=headers)
+headers = {'GROCY-API-KEY': grocy_config_object.api_key}
+itemRes = requests.get(grocy_config_object.base_url + "/objects/products", headers=headers)
 
 items = []
 
-print(itemRes.content)
+# print(itemRes.content)
 
 for item in json.loads(itemRes.content):
     items.append(GrocyItem(int(item["id"]), item["name"]))
 
-print(items)
+
+# print(items)
 
 
 def do_nothing():
@@ -130,6 +131,7 @@ class SplashScreen(tk.Frame):
 
         label = tk.Label(self, text="Cupboard Consumer\nLoading...", font=LARGE_FONT)
         label.grid(column=0, row=0, sticky='NSEW')
+
 
 class ItemsPage(tk.Frame):
 
@@ -347,7 +349,7 @@ class ConsumeOptionsPage(tk.Frame):
             if self.progress_bar["value"] >= 100:
                 self.controller.show_frame(ItemsPage)
                 self.do_consume(self.item.id, self.quantity.get())
-                t.join()
+                break
 
     def interpret_keypress(self, key, code):
         print("Consume option page handler")
@@ -359,10 +361,10 @@ class ConsumeOptionsPage(tk.Frame):
             self.progress_thread.do_run = True
 
     def do_consume(self, item_id: int, quantity: int):
-        headers = {'GROCY-API-KEY': grocy_config["api_key"]}
-        consume_url = f"{grocy_config['base_url']}stock/products/{item_id}/consume"
+        headers = {'GROCY-API-KEY': grocy_config_object.api_key}
+        consume_url = f"{grocy_config_object.base_url}/stock/products/{item_id}/consume"
         res = requests.post(consume_url, json={"amount": quantity}, headers=headers)
-        print(res)
+        print(res.json())
 
 
 # def openQuantityPage(item, controller):
