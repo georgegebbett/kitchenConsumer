@@ -69,11 +69,8 @@ def get_hotkey_item(hotkey_position):
 
 
 def get_item_by_id(item_id):
-    print(type(item_id))
-    print(type(items[0].id))
-
     for item in items:
-        print(f"Looking for {item_id} - this one is {item.id}")
+        # print(f"Looking for {item_id} - this one is {item.id}")
         if item.id == item_id:
             return item
 
