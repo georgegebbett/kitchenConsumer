@@ -8,7 +8,7 @@ import yaml
 from time import sleep
 
 from key_grab import grab_key_in_thread
-from hotkey_utils import get_hotkey_location
+from hotkeys.hotkey_utils import get_hotkey_location
 from grocy.GrocyItem import GrocyItem
 from grocy.GrocyConfig import GrocyConfig
 
