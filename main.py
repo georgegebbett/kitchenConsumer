@@ -173,7 +173,7 @@ class ItemsPage(tk.Frame):
         self.controller.show_frame(ConsumeOptionsPage)
         self.controller.frames[ConsumeOptionsPage].on_raise(item)
 
-    def interpret_keypress(self, key, code):
+    def interpret_keypress(self, code):
         print("Item page handler")
         hotkey_location = get_hotkey_location(code)
         if hotkey_location == -1:
@@ -261,7 +261,7 @@ class OptionPage(tk.Frame):
     def open_home_screen(self):
         self.controller.show_frame(ItemsPage)
 
-    def interpret_keypress(self, key, code):
+    def interpret_keypress(self, code):
         print("Option page handler")
         self.quantity.set(code)
         try:
@@ -351,7 +351,7 @@ class ConsumeOptionsPage(tk.Frame):
                 self.do_consume(self.item.id, self.quantity.get())
                 break
 
-    def interpret_keypress(self, key, code):
+    def interpret_keypress(self, code):
         print("Consume option page handler")
         if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
             self.progress_thread.do_run = False
