@@ -9,6 +9,7 @@ from time import sleep
 
 import hotkey_utils
 from key_grab import grab_key_in_thread
+from scan_grab import grab_scan_in_thread
 from hotkey_utils import get_hotkey_location
 from grocy.GrocyItem import GrocyItem
 from grocy.GrocyConfig import GrocyConfig
@@ -18,7 +19,7 @@ if os.environ.get('DISPLAY', '') == '':
     print('no display found. Using :0.0')
     os.environ.__setitem__('DISPLAY', ':0.0')
 
-test_mode = False
+test_mode = True
 config_file_name = "config.yaml"
 
 if test_mode:
@@ -117,6 +118,10 @@ class CupboardConsumer(tk.Tk):
         thread = threading.Thread(target=grab_key_in_thread, args=[self])
         thread.start()
 
+        # Start scanner grab thread
+        thread2 = threading.Thread(target=grab_scan_in_thread, args=[self])
+        thread2.start()
+
         self.show_frame(ItemsPage)
 
     def show_frame(self, cont):
@@ -146,14 +151,16 @@ class ItemsPage(tk.Frame):
         self.grid_rowconfigure(0, weight=2)
         self.grid_rowconfigure(1, weight=1)
 
+        self.barcode = tk.StringVar()
+
         label = tk.Label(self, text="Scan an item or select a hotkey", font=LARGER_FONT, wraplength=1000)
         label.grid(column=0, row=0)
 
         label = tk.Label(self, text="Press Ctrl to access options", font=LARGE_FONT)
         label.grid(column=0, row=1, sticky='EW')
 
-        # label = tk.Label(self, textvariable=self.keyName, font=LARGE_FONT)
-        # label.grid(column=0, row=2, sticky='EW')
+        label = tk.Label(self, textvariable=self.barcode, font=LARGE_FONT)
+        label.grid(column=0, row=2, sticky='EW')
 
         self.key_mapping = {
             29: self.open_options_screen
@@ -186,6 +193,14 @@ class ItemsPage(tk.Frame):
                 self.keyName.set("Number key")
         else:
             self.handle_hotkey(hotkey_location)
+
+    def interpret_scan(self, code: int):
+        # self.barcode.set("")
+        if code == 27:
+            # pass
+            self.barcode.set(self.barcode.get() + " ")
+        else:
+            self.barcode.set(self.barcode.get() + str(code))
 
 
 class OptionPage(tk.Frame):
