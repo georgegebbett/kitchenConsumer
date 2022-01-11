@@ -7,18 +7,18 @@ import os
 import yaml
 from time import sleep
 
+import hotkey_utils
 from key_grab import grab_key_in_thread
 from hotkey_utils import get_hotkey_location
 from grocy.GrocyItem import GrocyItem
 from grocy.GrocyConfig import GrocyConfig
-
-# import keyboard
+from grocy.ConsumeResponse import ConsumeResponse
 
 if os.environ.get('DISPLAY', '') == '':
     print('no display found. Using :0.0')
     os.environ.__setitem__('DISPLAY', ':0.0')
 
-test_mode = True
+test_mode = False
 config_file_name = "config.yaml"
 
 if test_mode:
@@ -43,21 +43,14 @@ LARGER_FONT = ("Verdana", 50)
 
 hotkey_items = options['hotkey_items']
 
-print(hotkey_items)
-
 # Get the items from Grocy
 headers = {'GROCY-API-KEY': grocy_config_object.api_key}
 itemRes = requests.get(grocy_config_object.base_url + "/objects/products", headers=headers)
 
 items = []
 
-# print(itemRes.content)
-
 for item in json.loads(itemRes.content):
     items.append(GrocyItem(int(item["id"]), item["name"]))
-
-
-# print(items)
 
 
 def do_nothing():
@@ -65,7 +58,10 @@ def do_nothing():
 
 
 def get_hotkey_item(hotkey_position):
-    return get_item_by_id(hotkey_items[hotkey_position[0]][hotkey_position[1]])
+    try:
+        return get_item_by_id(hotkey_items[hotkey_position[0]][hotkey_position[1]])
+    except IndexError:
+        return False
 
 
 def get_item_by_id(item_id):
@@ -75,6 +71,16 @@ def get_item_by_id(item_id):
             return item
 
     return -1
+
+
+def do_consume(item_id: int, quantity: int = 1):
+    consume_url = f"{grocy_config_object.base_url}/stock/products/{item_id}/consume"
+    res = requests.post(consume_url, json={"amount": quantity}, headers=headers)
+
+    if res.status_code == 200:
+        return ConsumeResponse(True, res.json())
+    else:
+        return ConsumeResponse(False, res.json())
 
 
 class CupboardConsumer(tk.Tk):
@@ -99,7 +105,7 @@ class CupboardConsumer(tk.Tk):
         self.last_keypress = None
 
         for F in (
-                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage):
+                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -154,13 +160,13 @@ class ItemsPage(tk.Frame):
         }
 
     def handle_hotkey(self, hotkey_position):
-        try:
-            selected_item: GrocyItem = get_hotkey_item(hotkey_position)
-            print(selected_item)
+        selected_item: GrocyItem = get_hotkey_item(hotkey_position)
+        print(selected_item)
+        if selected_item:
             item_name = selected_item.name
             self.keyName.set(item_name)
             self.open_consume_option_screen(selected_item)
-        except IndexError:
+        else:
             self.keyName.set("Key not configured")
 
     def open_options_screen(self):
@@ -190,11 +196,11 @@ class OptionPage(tk.Frame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=1)
+        self.grid_columnconfigure(3, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=1)
         self.grid_rowconfigure(3, weight=1)
         self.grid_rowconfigure(4, weight=1)
-        self.grid_rowconfigure(5, weight=1)
         self.quantity = tk.StringVar()
         self.itemId = tk.StringVar()
         self.itemName = tk.StringVar()
@@ -205,55 +211,62 @@ class OptionPage(tk.Frame):
         }
 
         label = tk.Label(self, text="Choose a hotkey to set up", font=LARGE_FONT)
-        label.grid(column=0, row=0, sticky='EW', columnspan=3)
+        label.grid(column=0, row=0, sticky='EW', columnspan=4)
 
-        button = tk.Button(self, text="1", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("1"))
-        button.grid(column=0, row=1, sticky="NSEW")
+        label = tk.Label(self, text="Press 'Cancel' to exit", font=LARGE_FONT)
+        label.grid(column=0, row=5, sticky='EW', columnspan=4)
 
-        button = tk.Button(self, text="2", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("2"))
-        button.grid(column=1, row=1, sticky="NSEW")
+        self.generate_hotkey_buttons()
 
-        button = tk.Button(self, text="3", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("3"))
-        button.grid(column=2, row=1, sticky="NSEW")
+    def generate_hotkey_buttons(self):
+        hotkey_row = 0
+        hotkey_col = 0
 
-        button = tk.Button(self, text="4", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("4"))
-        button.grid(column=0, row=2, sticky="NSEW")
+        while hotkey_row < len(hotkey_utils.hotkey_shape):
+            while hotkey_col < len(hotkey_utils.hotkey_shape[hotkey_row]):
+                current_item = get_hotkey_item([hotkey_row, hotkey_col])
+                if current_item:
+                    text = current_item.name
+                else:
+                    text = "Not Configured"
+                hotkey_button = tk.Button(self, text=text, font=LARGE_FONT, wraplength=240)
+                hotkey_button.grid(column=hotkey_col, row=hotkey_row + 1, sticky="NSEW")
+                hotkey_col += 1
+            hotkey_row += 1
+            hotkey_col = 0
 
-        button = tk.Button(self, text="5", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("5"))
-        button.grid(column=1, row=2, sticky="NSEW")
+        # self.key_0_0_button = tk.Button(self, text="1", wraplength='140', font=LARGE_FONT)
+        # self.key_0_0_button.grid(column=0, row=1, sticky="NSEW")
 
-        button = tk.Button(self, text="6", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("6"))
-        button.grid(column=2, row=2, sticky="NSEW")
-
-        button = tk.Button(self, text="7", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("7"))
-        button.grid(column=0, row=3, sticky="NSEW")
-
-        button = tk.Button(self, text="8", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("8"))
-        button.grid(column=1, row=3, sticky="NSEW")
-
-        button = tk.Button(self, text="9", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("9"))
-        button.grid(column=2, row=3, sticky="NSEW")
-
-        button = tk.Button(self, text="0", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.appendToQuantity("0"))
-        button.grid(column=0, row=4, sticky="NSEW")
-
-        button = tk.Button(self, text="<", wraplength='140', font=LARGE_FONT,
-                           command=lambda: self.backspaceQuantity())
-        button.grid(column=1, row=4, sticky="NSEW", columnspan=2)
-
-        button = tk.Button(self, text="Consume", wraplength='320', font=LARGE_FONT,
-                           command=lambda: self.doConsume(self.itemId.get(), self.itemName.get()))
-        button.grid(column=0, row=5, sticky="NSEW", columnspan=3)
+        # button = tk.Button(self, text="2", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=1, row=1, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="3", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=2, row=1, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="4", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=0, row=2, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="5", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=1, row=2, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="6", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=2, row=2, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="7", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=0, row=3, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="8", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=1, row=3, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="9", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=2, row=3, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="0", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=0, row=4, sticky="NSEW")
+        #
+        # button = tk.Button(self, text="<", wraplength='140', font=LARGE_FONT)
+        # button.grid(column=1, row=4, sticky="NSEW", columnspan=2)
 
     def open_home_screen(self):
         self.controller.show_frame(ItemsPage)
@@ -265,37 +278,6 @@ class OptionPage(tk.Frame):
             self.key_mapping[code]()
         except KeyError:
             do_nothing()
-
-    def appendToQuantity(self, quant):
-        if not self.quantityChanged.get():
-            self.quantity.set(quant)
-            self.quantityChanged.set(True)
-        else:
-            self.quantity.set(self.quantity.get() + quant)
-
-    def backspaceQuantity(self):
-        if not self.quantityChanged.get() or self.quantity.get() == "":
-            self.controller.show_frame(ItemsPage)
-        self.quantity.set(self.quantity.get()[0:-1])
-
-    def doConsume(self, itemId, itemName):
-        pass
-        # consumeHeaders = {
-        #     'GROCY-API-KEY': grocyApiKey,
-        #     'Content-Type': 'application/json'
-        # }
-        #
-        # data = json.dumps({
-        #     "amount": self.quantity.get(),
-        #     "transaction_type": "consume",
-        #     "spoiled": False
-        # })
-        # consumeRes = requests.post(grocyApiUrl + "stock/products/" + itemId + "/consume", headers=consumeHeaders,
-        #                            data=data)
-        # if consumeRes.status_code == 200:
-        #     openResultPage(itemName, self.quantity.get(), True, self.controller)
-        # else:
-        #     openResultPage(json.loads(consumeRes.text)["error_message"], self.quantity.get(), False, self.controller)
 
 
 class ConsumeOptionsPage(tk.Frame):
@@ -333,10 +315,10 @@ class ConsumeOptionsPage(tk.Frame):
 
         self.progress_thread = None
 
-    def on_raise(self, item: GrocyItem):
+    def on_raise(self, new_item: GrocyItem):
         self.progress_bar["value"] = 0
-        self.item = item
-        self.item_name.set(item.name)
+        self.item = new_item
+        self.item_name.set(new_item.name)
         self.quantity.set(1)
         self.quantity_string.set(f"Quantity: {self.quantity.get()}")
         self.progress_thread = threading.Thread(target=self.progress)
@@ -349,8 +331,14 @@ class ConsumeOptionsPage(tk.Frame):
             self.progress_bar["value"] += 2
             sleep(0.05)
             if self.progress_bar["value"] >= 100:
-                self.controller.show_frame(ItemsPage)
-                self.do_consume(self.item.id, self.quantity.get())
+                result = do_consume(self.item.id, self.quantity.get())
+                print(result)
+                if result.success:
+                    self.controller.show_frame(ItemsPage)
+                else:
+                    self.controller.frames[ConsumeFailurePage].error_message.set(result.error)
+                    self.controller.frames[ConsumeFailurePage].on_raise()
+                    self.controller.show_frame(ConsumeFailurePage)
                 break
 
     def increase_quantity(self, quantity: int = 1):
@@ -374,34 +362,57 @@ class ConsumeOptionsPage(tk.Frame):
             if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
                 self.increase_quantity()
 
-    def do_consume(self, item_id: int, quantity: int):
-        headers = {'GROCY-API-KEY': grocy_config_object.api_key}
-        consume_url = f"{grocy_config_object.base_url}/stock/products/{item_id}/consume"
-        res = requests.post(consume_url, json={"amount": quantity}, headers=headers)
-        print(res.json())
 
+class ConsumeFailurePage(tk.Frame):
 
-# def openQuantityPage(item, controller):
-#     app.frames[QuantityPage].quantity.set(item["quick_consume_amount"])
-#     app.frames[QuantityPage].quantityChanged.set(False)
-#     app.frames[QuantityPage].itemId.set(item["id"])
-#     app.frames[QuantityPage].itemName.set(item["name"])
-#     controller.show_frame(QuantityPage)
-#
-#
-# def openResultPage(item, quantity, success, controller):
-#     app.frames[ConsumeResultPage].success.set(success)
-#     if success:
-#         app.frames[ConsumeResultPage].message.set("Successfully consumed " + quantity + " of " + item)
-#         app.frames[ConsumeResultPage].label.config(bg="GREEN")
-#     else:
-#         app.frames[ConsumeResultPage].message.set("Error during consumption\n" + item)
-#         app.frames[ConsumeResultPage].label.config(bg="RED")
-#
-#
-#     controller.show_frame(ConsumeResultPage)
-#
-#     controller.after(2500, controller.show_frame, ItemsPage)
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.progress_thread = None
+        self.controller = controller
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=2)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        self.error_message = tk.StringVar()
+
+        label = tk.Label(self, text="Consume failed!", font=LARGER_FONT, wraplength=1000, background="RED")
+        label.grid(column=0, row=0, sticky="NSEW")
+
+        label = tk.Label(self, textvariable=self.error_message, font=LARGE_FONT, wraplength=1000, background="RED")
+        label.grid(column=0, row=1, sticky='NSEW')
+
+        self.progress_bar = ttk.Progressbar(self, mode='determinate', orient='horizontal')
+        self.progress_bar.grid(column=0, row=2, sticky='NSEW')
+
+        self.key_mapping = {
+            67: self.show_home_screen
+        }
+
+    def show_home_screen(self):
+        print("Exiting to home")
+        self.progress_thread.do_run = False
+        self.controller.show_frame(ItemsPage)
+
+    def interpret_keypress(self, code):
+        print("Consume failure page handler")
+        try:
+            self.key_mapping[code]()
+        except KeyError:
+            pass
+
+    def on_raise(self):
+        self.progress_bar["value"] = 0
+        self.progress_thread = threading.Thread(target=self.progress)
+        self.progress_thread.start()
+
+    def progress(self):
+        t = threading.currentThread()
+        while getattr(t, "do_run", True):
+            self.progress_bar["value"] += 1
+            sleep(0.05)
+            if self.progress_bar["value"] >= 100:
+                self.controller.show_frame(ItemsPage)
+                break
 
 
 app = CupboardConsumer()
