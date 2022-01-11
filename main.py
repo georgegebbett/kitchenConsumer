@@ -329,6 +329,11 @@ class ConsumeOptionsPage(tk.Frame):
         self.progress_bar = ttk.Progressbar(self, mode='determinate', orient='horizontal')
         self.progress_bar.grid(column=0, row=3, sticky='NSEW')
 
+        self.key_mapping = {
+            67: self.cancel_consume,
+            88: do_nothing
+        }
+
         self.progress_thread = None
 
     def on_raise(self, item: GrocyItem):
@@ -351,14 +356,26 @@ class ConsumeOptionsPage(tk.Frame):
                 self.do_consume(self.item.id, self.quantity.get())
                 break
 
+    def increase_quantity(self, quantity: int = 1):
+        self.progress_thread.do_run = False
+        self.quantity.set(self.quantity.get() + quantity)
+        print(f"Quantity increased to {self.quantity.get()}")
+        self.quantity_string.set(f"Quantity: {self.quantity.get()}")
+        self.progress_bar["value"] = 0
+        self.progress_thread.do_run = True
+
+    def cancel_consume(self):
+        print("Cancelling consumption!")
+        self.progress_thread.do_run = False
+        self.controller.show_frame(ItemsPage)
+
     def interpret_keypress(self, code):
         print("Consume option page handler")
-        if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
-            self.progress_thread.do_run = False
-            self.quantity.set(self.quantity.get() + 1)
-            self.quantity_string.set(f"Quantity: {self.quantity.get()}")
-            self.progress_bar["value"] = 0
-            self.progress_thread.do_run = True
+        try:
+            self.key_mapping[code]()
+        except KeyError:
+            if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
+                self.increase_quantity()
 
     def do_consume(self, item_id: int, quantity: int):
         headers = {'GROCY-API-KEY': grocy_config_object.api_key}
