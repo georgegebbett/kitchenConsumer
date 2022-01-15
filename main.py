@@ -6,11 +6,14 @@ from tkinter import ttk
 import json
 import requests
 import os
+
 import yaml
 from time import sleep
+from tkinterweb import HtmlLabel
 
 import hotkey_utils
 from grocy.GrocyMealPlan import GrocyMealPlan
+from grocy.GrocyRecipe import GrocyRecipe
 from key_grab import grab_key_in_thread
 from scan_grab import grab_scan_in_thread
 from hotkey_utils import get_hotkey_location
@@ -120,7 +123,8 @@ class CupboardConsumer(tk.Tk):
         self.last_keypress = None
 
         for F in (
-                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage, MealPlanPage):
+                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage, MealPlanPage,
+                ViewRecipePage):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -137,7 +141,7 @@ class CupboardConsumer(tk.Tk):
         thread2.start()
 
         self.show_frame(ItemsPage)
-        # self.show_frame(MealPlanPage)
+        # self.show_frame(ViewRecipePage)
 
     def show_frame(self, cont):
         frame = self.frames[cont]
@@ -316,7 +320,8 @@ class MealPlanPage(tk.Frame):
 
         self.today = datetime.date.today()
 
-        self.start_date = datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(days=(datetime.datetime.now().weekday() + 1))
+        self.start_date = datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(
+            days=(datetime.datetime.now().weekday() + 1))
         # self.start_date = datetime.datetime.now() + datetime.timedelta(days=1)
 
         self.days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -353,7 +358,8 @@ class MealPlanPage(tk.Frame):
         self.today = datetime.date.today()
 
         self.load_page_with_loading_message(
-            datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(days=(datetime.datetime.now().weekday() + 1)))
+            datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(
+                days=(datetime.datetime.now().weekday() + 1)))
 
     def next_week(self):
         self.load_page_with_loading_message(self.start_date + datetime.timedelta(weeks=1))
@@ -401,14 +407,13 @@ class MealPlanPage(tk.Frame):
             if meal['type'] == 'RECIPE':
                 row_recipe = tk.Label(self, text=meal['recipe'].name, font=LARGE_FONT,
                                       wraplength=800)
-                row_recipe.grid(column=2, row=time_delta+1, sticky='EW')
-                print(f"Putting {meal['recipe'].name} with d {time_delta} in row {time_delta+1}")
+                row_recipe.grid(column=2, row=time_delta + 1, sticky='EW')
+                print(f"Putting {meal['recipe'].name} with d {time_delta} in row {time_delta + 1}")
             elif meal['type'] == 'NOTE':
                 row_note = tk.Label(self, text=meal['note'], font=LARGE_FONT,
                                     wraplength=800)
-                row_note.grid(column=2, row=time_delta+1, sticky='EW')
-                print(f"Putting {meal['note']} with d {time_delta} in row {time_delta+1}")
-
+                row_note.grid(column=2, row=time_delta + 1, sticky='EW')
+                print(f"Putting {meal['note']} with d {time_delta} in row {time_delta + 1}")
 
         if show_buttons:
             next_button = tk.Button(self, text=">", font=LARGE_FONT, command=self.next_week)
@@ -428,6 +433,41 @@ class MealPlanPage(tk.Frame):
             self.key_mapping[code]()
         except KeyError:
             do_nothing()
+
+
+class ViewRecipePage(tk.Frame):
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=2)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.success = tk.BooleanVar()
+        self.item = None
+        self.item_name = tk.StringVar()
+        self.quantity = tk.IntVar()
+        self.quantity_string = tk.StringVar()
+        self.recipe = GrocyRecipe(5, grocy_config_object)
+        self.ingredients_var = tk.StringVar(value=self.recipe.ingredients)
+
+        header = tk.Label(self, text=self.recipe.name, font=LARGE_FONT, wraplength='1020')
+        header.grid(column=0, row=0, sticky='NSEW', columnspan=2)
+
+        steps = tk.Label(self, text=self.recipe.steps, wraplength=500)
+        steps.grid(column=1, row=1, sticky="NSEW")
+
+        ingredients = tk.Listbox(self, listvariable=self.ingredients_var)
+        ingredients.grid(column=0, row=1, sticky="NSEW")
+
+        self.key_mapping = {
+            67: self.open_meal_plan_screen(),
+            88: do_nothing
+        }
+
+    def open_meal_plan_screen(self):
+        self.controller.show_frame(MealPlanPage)
 
 
 class ConsumeOptionsPage(tk.Frame):
