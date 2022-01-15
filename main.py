@@ -19,7 +19,7 @@ if os.environ.get('DISPLAY', '') == '':
     print('no display found. Using :0.0')
     os.environ.__setitem__('DISPLAY', ':0.0')
 
-test_mode = True
+test_mode = False
 config_file_name = "config.yaml"
 
 if test_mode:
@@ -45,8 +45,10 @@ LARGER_FONT = ("Verdana", 50)
 hotkey_items = options['hotkey_items']
 
 # Get the items from Grocy
-headers = {'GROCY-API-KEY': grocy_config_object.api_key}
-itemRes = requests.get(grocy_config_object.base_url + "/objects/products", headers=headers)
+grocy_headers = {'GROCY-API-KEY': grocy_config_object.api_key}
+itemRes = requests.get(grocy_config_object.base_url + "/objects/products", headers=grocy_headers)
+
+bb_headers = {"BBUDDY-API-KEY": grocy_config_object.bb_api_key}
 
 items = []
 
@@ -76,12 +78,22 @@ def get_item_by_id(item_id):
 
 def do_consume(item_id: int, quantity: int = 1):
     consume_url = f"{grocy_config_object.base_url}/stock/products/{item_id}/consume"
-    res = requests.post(consume_url, json={"amount": quantity}, headers=headers)
+    res = requests.post(consume_url, json={"amount": quantity}, headers=grocy_headers)
 
     if res.status_code == 200:
         return ConsumeResponse(True, res.json())
     else:
         return ConsumeResponse(False, res.json())
+
+
+def barcode_buddy_scan(barcode: str):
+    print(f"BB barcode: {barcode}")
+    scan_url = f"{grocy_config_object.bb_base_url}/action/scan?apikey={grocy_config_object.bb_api_key}&add={barcode}"
+    res = requests.get(scan_url)
+    # print(res.json()["data"]["result"])
+    return res.json()["data"]["result"]
+
+
 
 
 class CupboardConsumer(tk.Tk):
@@ -150,17 +162,19 @@ class ItemsPage(tk.Frame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=2)
         self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
 
-        self.barcode = tk.StringVar()
+        self.barcode_result = tk.StringVar()
+        self.barcode = ""
 
         label = tk.Label(self, text="Scan an item or select a hotkey", font=LARGER_FONT, wraplength=1000)
         label.grid(column=0, row=0)
 
         label = tk.Label(self, text="Press Ctrl to access options", font=LARGE_FONT)
-        label.grid(column=0, row=1, sticky='EW')
-
-        label = tk.Label(self, textvariable=self.barcode, font=LARGE_FONT)
         label.grid(column=0, row=2, sticky='EW')
+
+        label = tk.Label(self, textvariable=self.barcode_result, font=LARGE_FONT, wraplength=1000)
+        label.grid(column=0, row=1, sticky='EW')
 
         self.key_mapping = {
             29: self.open_options_screen
@@ -194,13 +208,14 @@ class ItemsPage(tk.Frame):
         else:
             self.handle_hotkey(hotkey_location)
 
-    def interpret_scan(self, code: int):
+    def interpret_scan(self, key: str):
         # self.barcode.set("")
-        if code == 27:
+        if key == "ENTER":
             # pass
-            self.barcode.set(self.barcode.get() + " ")
-        else:
-            self.barcode.set(self.barcode.get() + str(code))
+            self.barcode_result.set(barcode_buddy_scan(self.barcode))
+            self.barcode = ""
+        elif len(key) == 1:
+            self.barcode = (self.barcode + key)
 
 
 class OptionPage(tk.Frame):
