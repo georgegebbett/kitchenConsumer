@@ -1,4 +1,6 @@
+import datetime
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 import json
@@ -8,6 +10,7 @@ import yaml
 from time import sleep
 
 import hotkey_utils
+from grocy.GrocyMealPlan import GrocyMealPlan
 from key_grab import grab_key_in_thread
 from scan_grab import grab_scan_in_thread
 from hotkey_utils import get_hotkey_location
@@ -39,6 +42,7 @@ print(grocy_config_object)
 
 # Other misc variables
 runFullscreen = options['fullscreen']
+show_buttons = options['show_buttons']
 LARGE_FONT = ("Verdana", 25)
 LARGER_FONT = ("Verdana", 50)
 
@@ -94,8 +98,6 @@ def barcode_buddy_scan(barcode: str):
     return res.json()["data"]["result"]
 
 
-
-
 class CupboardConsumer(tk.Tk):
 
     def __init__(self, *args, **kwargs):
@@ -118,7 +120,7 @@ class CupboardConsumer(tk.Tk):
         self.last_keypress = None
 
         for F in (
-                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage):
+                SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage, MealPlanPage):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -135,6 +137,7 @@ class CupboardConsumer(tk.Tk):
         thread2.start()
 
         self.show_frame(ItemsPage)
+        # self.show_frame(MealPlanPage)
 
     def show_frame(self, cont):
         frame = self.frames[cont]
@@ -176,8 +179,17 @@ class ItemsPage(tk.Frame):
         label = tk.Label(self, textvariable=self.barcode_result, font=LARGE_FONT, wraplength=1000)
         label.grid(column=0, row=1, sticky='EW')
 
+        if show_buttons:
+            meal_button = tk.Button(self, text="Meal plan", font=LARGE_FONT, command=self.open_meal_plan_screen)
+            exit_button = tk.Button(self, text="Exit", font=LARGE_FONT, command=controller.destroy)
+
+            meal_button.grid(column=0, row=3)
+            exit_button.grid(column=1, row=3)
+
         self.key_mapping = {
-            29: self.open_options_screen
+            29: self.open_options_screen,
+            56: self.open_meal_plan_screen,
+            67: self.clear_scan_result
         }
 
     def handle_hotkey(self, hotkey_position):
@@ -192,6 +204,10 @@ class ItemsPage(tk.Frame):
 
     def open_options_screen(self):
         self.controller.show_frame(OptionPage)
+
+    def open_meal_plan_screen(self):
+        self.controller.show_frame(MealPlanPage)
+        self.controller.frames[MealPlanPage].on_raise()
 
     def open_consume_option_screen(self, item: GrocyItem):
         self.controller.show_frame(ConsumeOptionsPage)
@@ -216,6 +232,9 @@ class ItemsPage(tk.Frame):
             self.barcode = ""
         elif len(key) == 1:
             self.barcode = (self.barcode + key)
+
+    def clear_scan_result(self):
+        self.barcode_result.set("")
 
 
 class OptionPage(tk.Frame):
@@ -265,45 +284,146 @@ class OptionPage(tk.Frame):
             hotkey_row += 1
             hotkey_col = 0
 
-        # self.key_0_0_button = tk.Button(self, text="1", wraplength='140', font=LARGE_FONT)
-        # self.key_0_0_button.grid(column=0, row=1, sticky="NSEW")
-
-        # button = tk.Button(self, text="2", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=1, row=1, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="3", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=2, row=1, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="4", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=0, row=2, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="5", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=1, row=2, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="6", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=2, row=2, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="7", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=0, row=3, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="8", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=1, row=3, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="9", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=2, row=3, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="0", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=0, row=4, sticky="NSEW")
-        #
-        # button = tk.Button(self, text="<", wraplength='140', font=LARGE_FONT)
-        # button.grid(column=1, row=4, sticky="NSEW", columnspan=2)
-
     def open_home_screen(self):
         self.controller.show_frame(ItemsPage)
 
     def interpret_keypress(self, code):
         print("Option page handler")
         self.quantity.set(code)
+        try:
+            self.key_mapping[code]()
+        except KeyError:
+            do_nothing()
+
+
+class MealPlanPage(tk.Frame):
+
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=2)
+        self.grid_columnconfigure(2, weight=2)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(5, weight=1)
+        self.grid_rowconfigure(6, weight=1)
+        self.grid_rowconfigure(7, weight=1)
+        self.grid_rowconfigure(8, weight=1)
+
+        self.today = datetime.date.today()
+
+        self.start_date = datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(days=(datetime.datetime.now().weekday() + 1))
+        # self.start_date = datetime.datetime.now() + datetime.timedelta(days=1)
+
+        self.days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+        # self.meal_plan = GrocyMealPlan(self.start_date, grocy_config_object)
+
+        self.meal_plan = None
+
+        self.key_mapping = {
+            67: self.open_home_screen,
+            42: self.prev_week,
+            68: self.next_week
+        }
+
+        # self.generate_meal_plan()
+
+    def load_page_with_loading_message(self, start_date: datetime.datetime):
+        for widget in self.winfo_children():
+            print(f"destroying {widget}")
+            widget.destroy()
+
+        self.start_date = start_date
+
+        header_text = "Loading..."
+
+        header = tk.Label(self, text=header_text, font=LARGE_FONT)
+        header.grid(column=0, row=0, sticky='NSEW', columnspan=3, rowspan=7)
+
+        print("meal plan generation")
+        self.update()
+        self.generate_meal_plan()
+
+    def on_raise(self):
+        self.today = datetime.date.today()
+
+        self.load_page_with_loading_message(
+            datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(days=(datetime.datetime.now().weekday() + 1)))
+
+    def next_week(self):
+        self.load_page_with_loading_message(self.start_date + datetime.timedelta(weeks=1))
+
+    def prev_week(self):
+        self.load_page_with_loading_message(self.start_date - datetime.timedelta(weeks=1))
+
+    def generate_meal_plan(self):
+
+        self.meal_plan = GrocyMealPlan(self.start_date, grocy_config_object)
+
+        print("meal plan updated")
+
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        print("widgets destroyed")
+
+        header_text = f"Meals for w/c {self.start_date.strftime('%d/%m/%y')}:"
+
+        header = tk.Label(self, text=header_text, font=LARGE_FONT)
+        header.grid(column=0, row=0, sticky='EW', columnspan=3)
+
+        print("header added, updating meal plan")
+        print(f"start date: {self.start_date}")
+
+        footer = tk.Label(self, text="Press 'Cancel' to exit", font=LARGE_FONT)
+        footer.grid(column=0, row=8, sticky='EW', columnspan=3)
+
+        for i in range(1, 8):
+            row_label = tk.Label(self, text=i, font=LARGE_FONT)
+            row_label.grid(column=0, row=i, sticky='EW')
+
+            row_day = tk.Label(self, text=self.days[i - 1], font=LARGE_FONT)
+            row_day.grid(column=1, row=i, sticky='EW')
+
+        for meal in self.meal_plan.meal_plan:
+            time_delta = (meal['date'] - self.start_date).days
+            print(f"Date: {meal['date']} Delta: {time_delta}")
+
+            if time_delta > 7:
+                print("Delta too big, skipping this meal")
+                continue
+
+            if meal['type'] == 'RECIPE':
+                row_recipe = tk.Label(self, text=meal['recipe'].name, font=LARGE_FONT,
+                                      wraplength=800)
+                row_recipe.grid(column=2, row=time_delta+1, sticky='EW')
+                print(f"Putting {meal['recipe'].name} with d {time_delta} in row {time_delta+1}")
+            elif meal['type'] == 'NOTE':
+                row_note = tk.Label(self, text=meal['note'], font=LARGE_FONT,
+                                    wraplength=800)
+                row_note.grid(column=2, row=time_delta+1, sticky='EW')
+                print(f"Putting {meal['note']} with d {time_delta} in row {time_delta+1}")
+
+
+        if show_buttons:
+            next_button = tk.Button(self, text=">", font=LARGE_FONT, command=self.next_week)
+            prev_button = tk.Button(self, text="<", font=LARGE_FONT, command=self.prev_week)
+            exit_button = tk.Button(self, text="Exit", font=LARGE_FONT, command=self.open_home_screen)
+
+            next_button.grid(column=1, row=9, sticky="EW")
+            prev_button.grid(column=0, row=9, sticky="EW")
+            exit_button.grid(column=2, row=9, sticky="EW")
+
+    def open_home_screen(self):
+        self.controller.show_frame(ItemsPage)
+
+    def interpret_keypress(self, code):
+        print("Meal plan page handler")
         try:
             self.key_mapping[code]()
         except KeyError:
