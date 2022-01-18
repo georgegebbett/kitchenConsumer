@@ -98,7 +98,8 @@ def barcode_buddy_scan(barcode: str):
     scan_url = f"{grocy_config_object.bb_base_url}/action/scan?apikey={grocy_config_object.bb_api_key}&add={barcode}"
     res = requests.get(scan_url)
     # print(res.json()["data"]["result"])
-    return res.json()["data"]["result"]
+    if res.status_code == 200:
+        return res.json()["data"]["result"]
 
 
 class CupboardConsumer(tk.Tk):
