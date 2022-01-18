@@ -9,6 +9,8 @@ import os
 
 import yaml
 from time import sleep
+
+from tk_html_widgets import HTMLLabel
 from tkinterweb import HtmlLabel
 
 import hotkey_utils
@@ -320,6 +322,7 @@ class MealPlanPage(tk.Frame):
         self.grid_rowconfigure(8, weight=1)
 
         self.today = datetime.date.today()
+        self.todays_recipe = None
 
         self.start_date = datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(
             days=(datetime.datetime.now().weekday() + 1))
@@ -334,7 +337,8 @@ class MealPlanPage(tk.Frame):
         self.key_mapping = {
             67: self.open_home_screen,
             42: self.prev_week,
-            68: self.next_week
+            68: self.next_week,
+            29: self.open_recipe_screen
         }
 
         # self.generate_meal_plan()
@@ -354,6 +358,11 @@ class MealPlanPage(tk.Frame):
         print("meal plan generation")
         self.update()
         self.generate_meal_plan()
+
+    def open_recipe_screen(self):
+        if self.todays_recipe is not None:
+            self.controller.frames[ViewRecipePage].on_raise(self.todays_recipe)
+            self.controller.show_frame(ViewRecipePage)
 
     def on_raise(self):
         self.today = datetime.date.today()
@@ -387,7 +396,7 @@ class MealPlanPage(tk.Frame):
         print("header added, updating meal plan")
         print(f"start date: {self.start_date}")
 
-        footer = tk.Label(self, text="Press 'Cancel' to exit", font=LARGE_FONT)
+        footer = tk.Label(self, text="'Cancel': exit - 'Ctrl': today's recipe", font=LARGE_FONT)
         footer.grid(column=0, row=8, sticky='EW', columnspan=3)
 
         for i in range(1, 8):
@@ -406,6 +415,11 @@ class MealPlanPage(tk.Frame):
                 continue
 
             if meal['type'] == 'RECIPE':
+                today = datetime.datetime.today()
+                today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+                print(f"{today} - {meal['date']}")
+                if meal['date'] == today:
+                    self.todays_recipe = meal['recipe']
                 row_recipe = tk.Label(self, text=meal['recipe'].name, font=LARGE_FONT,
                                       wraplength=800)
                 row_recipe.grid(column=2, row=time_delta + 1, sticky='EW')
@@ -420,10 +434,12 @@ class MealPlanPage(tk.Frame):
             next_button = tk.Button(self, text=">", font=LARGE_FONT, command=self.next_week)
             prev_button = tk.Button(self, text="<", font=LARGE_FONT, command=self.prev_week)
             exit_button = tk.Button(self, text="Exit", font=LARGE_FONT, command=self.open_home_screen)
+            recipe_button = tk.Button(self, text="Recipe", font=LARGE_FONT, command=self.open_recipe_screen)
 
             next_button.grid(column=1, row=9, sticky="EW")
             prev_button.grid(column=0, row=9, sticky="EW")
             exit_button.grid(column=2, row=9, sticky="EW")
+            recipe_button.grid(column=3, row=9, sticky="EW")
 
     def open_home_screen(self):
         self.controller.show_frame(ItemsPage)
@@ -445,30 +461,53 @@ class ViewRecipePage(tk.Frame):
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
-        self.success = tk.BooleanVar()
-        self.item = None
-        self.item_name = tk.StringVar()
-        self.quantity = tk.IntVar()
-        self.quantity_string = tk.StringVar()
         self.recipe = GrocyRecipe(5, grocy_config_object)
-        self.ingredients_var = tk.StringVar(value=self.recipe.ingredients)
+        self.ingredients_var = tk.StringVar()
+        self.ingredients = ""
+
+        self.key_mapping = {
+            67: self.open_meal_plan_screen
+        }
+
+    def interpret_keypress(self, code):
+        print("Recipe page handler")
+        try:
+            self.key_mapping[code]()
+        except KeyError:
+            do_nothing()
+
+    def open_meal_plan_screen(self):
+        self.controller.show_frame(MealPlanPage)
+
+    def on_raise(self, recipe: GrocyRecipe):
+        self.recipe = recipe
+        self.ingredients = ""
+
+        for widget in self.winfo_children():
+            widget.destroy()
 
         header = tk.Label(self, text=self.recipe.name, font=LARGE_FONT, wraplength='1020')
         header.grid(column=0, row=0, sticky='NSEW', columnspan=2)
 
-        steps = tk.Label(self, text=self.recipe.steps, wraplength=500)
-        steps.grid(column=1, row=1, sticky="NSEW")
+        footer = tk.Label(self, text="Press 'Cancel' to go back", font=LARGE_FONT, wraplength='1020')
+        footer.grid(column=0, row=2, sticky='NSEW', columnspan=2)
 
-        ingredients = tk.Listbox(self, listvariable=self.ingredients_var)
-        ingredients.grid(column=0, row=1, sticky="NSEW")
+        steps_html = HTMLLabel(self, html=self.recipe.steps)
+        steps_html.grid(column=1, row=1, sticky="NSEW")
 
-        self.key_mapping = {
-            67: self.open_meal_plan_screen(),
-            88: do_nothing
-        }
+        for ingredient in self.recipe.ingredients:
+            for check_item in items:
+                if check_item.id == int(ingredient["product_id"]):
+                    self.ingredients += f"{ingredient['amount']} {check_item.name}\n"
 
-    def open_meal_plan_screen(self):
-        self.controller.show_frame(MealPlanPage)
+        self.ingredients_var.set(self.ingredients)
+
+        ingredients = tk.Label(self, textvariable=self.ingredients_var, font=LARGE_FONT)
+        ingredients.grid(column=0, row=1, sticky="NEW")
+
+        if show_buttons:
+            exit_button = tk.Button(self, text="exit", command=self.open_meal_plan_screen)
+            exit_button.grid(column=0, row=3, sticky="NSEW")
 
 
 class ConsumeOptionsPage(tk.Frame):
