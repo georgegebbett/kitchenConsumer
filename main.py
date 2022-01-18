@@ -189,14 +189,19 @@ class ItemsPage(tk.Frame):
         if show_buttons:
             meal_button = tk.Button(self, text="Meal plan", font=LARGE_FONT, command=self.open_meal_plan_screen)
             exit_button = tk.Button(self, text="Exit", font=LARGE_FONT, command=controller.destroy)
+            switch_button = tk.Button(self, text="Switch", font=LARGE_FONT, command=self.switch_consume_purchase)
+            clear_button = tk.Button(self, text="Clear", font=LARGE_FONT, command=self.clear_scan_result)
 
             meal_button.grid(column=0, row=3)
             exit_button.grid(column=1, row=3)
+            switch_button.grid(column=2, row=3)
+            clear_button.grid(column=2, row=4)
 
         self.key_mapping = {
             29: self.open_options_screen,
             56: self.open_meal_plan_screen,
-            67: self.clear_scan_result
+            67: self.clear_scan_result,
+            87: self.switch_consume_purchase
         }
 
     def handle_hotkey(self, hotkey_position):
@@ -219,6 +224,21 @@ class ItemsPage(tk.Frame):
     def open_consume_option_screen(self, item: GrocyItem):
         self.controller.show_frame(ConsumeOptionsPage)
         self.controller.frames[ConsumeOptionsPage].on_raise(item)
+
+    def switch_consume_purchase(self):
+        mode_url = f"{grocy_config_object.bb_base_url}/state/getmode?apikey={grocy_config_object.bb_api_key}"
+        response = requests.get(mode_url)
+
+        current_mode = response.json()['data']['mode']
+
+        print(current_mode)
+
+        if current_mode == 0:
+            barcode_buddy_scan("BBUDDY-P")
+            self.barcode_result.set("State set to purchase")
+        else:
+            barcode_buddy_scan("BBUDDY-C")
+            self.barcode_result.set("State set to consume")
 
     def interpret_keypress(self, code):
         print("Item page handler")
