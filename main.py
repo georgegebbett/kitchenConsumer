@@ -242,14 +242,12 @@ class ItemsPage(tk.Frame):
 
     def interpret_keypress(self, code):
         print("Item page handler")
-        hotkey_location = get_hotkey_location(code)
-        if hotkey_location == -1:
-            try:
-                self.key_mapping[code]()
-            except KeyError:
-                self.keyName.set("Number key")
-        else:
-            self.handle_hotkey(hotkey_location)
+        try:
+            self.key_mapping[code]()
+        except KeyError:
+            hotkey_location = get_hotkey_location(code)
+            if hotkey_location != -1:
+                self.handle_hotkey(hotkey_location)
 
     def interpret_scan(self, key: str):
         # self.barcode.set("")
