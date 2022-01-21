@@ -47,6 +47,6 @@ class GrocyMealPlan:
             else:
                 self.meal_plan.append({
                     'date': datetime.datetime.strptime(meal['day'], '%Y-%m-%d'),
-                    'type': 'RECIPE',
-                    'recipe': GrocyRecipe(5, self.grocy_config)
+                    'type': 'NOTE',
+                    'note': "meal plan goes brrrrrrrrrr"
                 })

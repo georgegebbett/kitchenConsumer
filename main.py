@@ -69,6 +69,10 @@ def do_nothing():
     pass
 
 
+def throw_exception():
+    raise ZeroDivisionError
+
+
 def get_hotkey_item(hotkey_position):
     try:
         return get_item_by_id(hotkey_items[hotkey_position[0]][hotkey_position[1]])
@@ -98,10 +102,13 @@ def do_consume(item_id: int, quantity: int = 1):
 def barcode_buddy_scan(barcode: str):
     print(f"BB barcode: {barcode}")
     scan_url = f"{grocy_config_object.bb_base_url}/action/scan?apikey={grocy_config_object.bb_api_key}&add={barcode}"
-    res = requests.get(scan_url)
-    # print(res.json()["data"]["result"])
-    if res.status_code == 200:
-        return res.json()["data"]["result"]
+    try:
+        res = requests.get(scan_url)
+        # print(res.json()["data"]["result"])
+        if res.status_code == 200:
+            return res.json()["data"]["result"]
+    except:
+        return "Error decoding JSON, try again"
 
 
 class CupboardConsumer(tk.Tk):
@@ -188,12 +195,12 @@ class ItemsPage(tk.Frame):
 
         if show_buttons:
             meal_button = tk.Button(self, text="Meal plan", font=LARGE_FONT, command=self.open_meal_plan_screen)
-            exit_button = tk.Button(self, text="Exit", font=LARGE_FONT, command=controller.destroy)
+            exception_button = tk.Button(self, text="Throw!", font=LARGE_FONT, command=throw_exception)
             switch_button = tk.Button(self, text="Switch", font=LARGE_FONT, command=self.switch_consume_purchase)
             clear_button = tk.Button(self, text="Clear", font=LARGE_FONT, command=self.clear_scan_result)
 
             meal_button.grid(column=0, row=3)
-            exit_button.grid(column=1, row=3)
+            exception_button.grid(column=1, row=3)
             switch_button.grid(column=2, row=3)
             clear_button.grid(column=2, row=4)
 
@@ -477,11 +484,14 @@ class ViewRecipePage(tk.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=2)
         self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
         self.recipe = GrocyRecipe(5, grocy_config_object)
         self.ingredients_var = tk.StringVar()
         self.ingredients = ""
+        self.barcode_result = tk.StringVar()
+        self.barcode = ""
 
         self.key_mapping = {
             67: self.open_meal_plan_screen
