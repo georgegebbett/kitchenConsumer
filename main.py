@@ -504,12 +504,24 @@ class ViewRecipePage(tk.Frame):
         except KeyError:
             do_nothing()
 
+    def interpret_scan(self, key: str):
+        print("Barcode handled by recipe page")
+        if key == "ENTER":
+            # pass
+            self.barcode_result.set(barcode_buddy_scan(self.barcode))
+            self.barcode = ""
+        elif len(key) == 1:
+            self.barcode = (self.barcode + key)
+
     def open_meal_plan_screen(self):
         self.controller.show_frame(MealPlanPage)
 
     def on_raise(self, recipe: GrocyRecipe):
         self.recipe = recipe
         self.ingredients = ""
+        self.barcode = ""
+        self.barcode_result.set("")
+        barcode_buddy_scan("BBUDDY-C")
 
         for widget in self.winfo_children():
             widget.destroy()
@@ -518,7 +530,7 @@ class ViewRecipePage(tk.Frame):
         header.grid(column=0, row=0, sticky='NSEW', columnspan=2)
 
         footer = tk.Label(self, text="Press 'Cancel' to go back", font=LARGE_FONT, wraplength='1020')
-        footer.grid(column=0, row=2, sticky='NSEW', columnspan=2)
+        footer.grid(column=0, row=3, sticky='NSEW', columnspan=2)
 
         steps_html = HTMLLabel(self, html=self.recipe.steps)
         steps_html.grid(column=1, row=1, sticky="NSEW")
@@ -530,12 +542,15 @@ class ViewRecipePage(tk.Frame):
 
         self.ingredients_var.set(self.ingredients)
 
-        ingredients = tk.Label(self, textvariable=self.ingredients_var, font=LARGE_FONT)
+        ingredients = tk.Label(self, textvariable=self.ingredients_var, font=LARGE_FONT, wraplength='510')
         ingredients.grid(column=0, row=1, sticky="NEW")
+
+        barcode_result_label = tk.Label(self, textvariable=self.barcode_result, font=LARGE_FONT, wraplength='510')
+        barcode_result_label.grid(row=2, column=0, columnspan=2, sticky="NSEW")
 
         if show_buttons:
             exit_button = tk.Button(self, text="exit", command=self.open_meal_plan_screen)
-            exit_button.grid(column=0, row=3, sticky="NSEW")
+            exit_button.grid(column=0, row=4, sticky="NSEW")
 
 
 class ConsumeOptionsPage(tk.Frame):
