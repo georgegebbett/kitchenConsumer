@@ -23,4 +23,8 @@ def grab_scan_in_thread(app_instance):
         # print(f"Type: {event.type!s} Code: {event.code!s} Value: {event.value!s}")
         if event.type == evdev.ecodes.EV_KEY and event.value == 1:
             match = re.match(key_regex, evdev.ecodes.KEY[event.code]).group(1)
-            app_instance.active_frame.interpret_scan(match)
+            try:
+                app_instance.active_frame.interpret_scan(match)
+            except:
+                pass
+
