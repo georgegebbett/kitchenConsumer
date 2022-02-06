@@ -2,7 +2,7 @@ import datetime
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, simpledialog
 import json
 import requests
 import os
@@ -134,7 +134,7 @@ class CupboardConsumer(tk.Tk):
 
         for F in (
                 SplashScreen, ItemsPage, OptionPage, ConsumeOptionsPage, ConsumeFailurePage, MealPlanPage,
-                ViewRecipePage):
+                ViewRecipePage, BbuddyQuantPrompt):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -198,17 +198,20 @@ class ItemsPage(tk.Frame):
             exception_button = tk.Button(self, text="Throw!", font=LARGE_FONT, command=throw_exception)
             switch_button = tk.Button(self, text="Switch", font=LARGE_FONT, command=self.switch_consume_purchase)
             clear_button = tk.Button(self, text="Clear", font=LARGE_FONT, command=self.clear_scan_result)
+            quant_button = tk.Button(self, text="Quant", font=LARGE_FONT, command=self.ask_quantity)
 
             meal_button.grid(column=0, row=3)
             exception_button.grid(column=1, row=3)
             switch_button.grid(column=2, row=3)
             clear_button.grid(column=2, row=4)
+            quant_button.grid(column=1, row=4)
 
         self.key_mapping = {
             29: self.open_options_screen,
             56: self.open_meal_plan_screen,
             67: self.clear_scan_result,
-            87: self.switch_consume_purchase
+            87: self.switch_consume_purchase,
+            66: self.open_quantity_screen
         }
 
     def handle_hotkey(self, hotkey_position):
@@ -231,6 +234,9 @@ class ItemsPage(tk.Frame):
     def open_consume_option_screen(self, item: GrocyItem):
         self.controller.show_frame(ConsumeOptionsPage)
         self.controller.frames[ConsumeOptionsPage].on_raise(item)
+
+    def open_quantity_screen(self):
+        self.controller.show_frame(BbuddyQuantPrompt)
 
     def switch_consume_purchase(self):
         mode_url = f"{grocy_config_object.bb_base_url}/state/getmode?apikey={grocy_config_object.bb_api_key}"
@@ -267,6 +273,83 @@ class ItemsPage(tk.Frame):
 
     def clear_scan_result(self):
         self.barcode_result.set("")
+
+    def ask_quantity(self):
+        self.controller.show_frame(BbuddyQuantPrompt)
+
+
+class BbuddyQuantPrompt(tk.Frame):
+
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
+        self.quantity = tk.StringVar()
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        label = tk.Label(self, text="Enter Quantity", font=LARGER_FONT, wraplength=1000)
+        label.grid(column=0, row=0)
+
+        label_2 = tk.Label(self, text="Use meal plan button for number 5", font=LARGE_FONT, wraplength=1000)
+        label_2.grid(column=0, row=1)
+
+        inp = tk.Entry(self, textvariable=self.quantity, font=LARGER_FONT, justify="center")
+        inp.grid(column=0, row=2)
+
+        if show_buttons:
+            two_button = tk.Button(self, text="2", command=lambda: self.interpret_keypress(108))
+            two_button.grid(column=0, row=3)
+
+            del_button = tk.Button(self, text="<", command=self.del_char)
+            del_button.grid(column=1, row=3)
+
+            sub_button = tk.Button(self, text="go", command=self.submit_quantity)
+            sub_button.grid(column=2, row=3)
+
+            home_button = tk.Button(self, text="home", command=self.back_home)
+            home_button.grid(column=2, row=4)
+
+        self.numberCodes = {
+            102: "7",
+            103: "8",
+            104: "9",
+            105: "4",
+            56: "5",
+            106: "6",
+            107: "1",
+            108: "2",
+            109: "3",
+            183: "0"
+        }
+
+    def interpret_keypress(self, code):
+        print("Bbuddy Quantity handler")
+        try:
+            self.append_char(self.numberCodes[code])
+        except KeyError:
+            if code == 96:
+                self.submit_quantity()
+            if code == 67:
+                self.del_char()
+
+    def append_char(self, char):
+        self.quantity.set(self.quantity.get() + char)
+
+    def del_char(self):
+        if self.quantity.get() == "":
+            self.back_home()
+        else:
+            self.quantity.set(self.quantity.get()[:-1])
+
+    def submit_quantity(self):
+        self.controller.frames[ItemsPage].barcode_result.set(barcode_buddy_scan(f"BBUDDY-Q-{self.quantity.get()}"))
+        self.back_home()
+
+    def back_home(self):
+        self.quantity.set("")
+        self.controller.show_frame(ItemsPage)
 
 
 class OptionPage(tk.Frame):
@@ -392,9 +475,16 @@ class MealPlanPage(tk.Frame):
     def on_raise(self):
         self.today = datetime.date.today()
 
-        self.load_page_with_loading_message(
-            datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(
-                days=(datetime.datetime.now().weekday() + 1)))
+        print(f"Today is {self.today}")
+        print(f"The weekday number of today is {self.today.weekday()}")
+
+        if self.today.weekday() == 6:
+            start_date = datetime.datetime(self.today.year, self.today.month, self.today.day)
+        else:
+            start_date = datetime.datetime(self.today.year, self.today.month, self.today.day) - datetime.timedelta(
+                days=(datetime.datetime.now().weekday() + 1))
+
+        self.load_page_with_loading_message(start_date)
 
     def next_week(self):
         self.load_page_with_loading_message(self.start_date + datetime.timedelta(weeks=1))
@@ -405,6 +495,8 @@ class MealPlanPage(tk.Frame):
     def generate_meal_plan(self):
 
         self.meal_plan = GrocyMealPlan(self.start_date, grocy_config_object)
+
+        print(datetime.datetime.now().weekday())
 
         print("meal plan updated")
 
