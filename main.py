@@ -1,27 +1,24 @@
 import datetime
-import threading
-import time
-import tkinter as tk
-from tkinter import ttk, simpledialog
 import json
-import requests
 import os
-
-import yaml
+import threading
+import tkinter as tk
 from time import sleep
+from tkinter import ttk
 
+import requests
+import yaml
 from tk_html_widgets import HTMLLabel
-from tkinterweb import HtmlLabel
 
 import hotkey_utils
+from grocy.ConsumeResponse import ConsumeResponse
+from grocy.GrocyConfig import GrocyConfig
+from grocy.GrocyItem import GrocyItem
 from grocy.GrocyMealPlan import GrocyMealPlan
 from grocy.GrocyRecipe import GrocyRecipe
+from hotkey_utils import get_hotkey_location
 from key_grab import grab_key_in_thread
 from scan_grab import grab_scan_in_thread
-from hotkey_utils import get_hotkey_location
-from grocy.GrocyItem import GrocyItem
-from grocy.GrocyConfig import GrocyConfig
-from grocy.ConsumeResponse import ConsumeResponse
 
 if os.environ.get('DISPLAY', '') == '':
     print('no display found. Using :0.0')

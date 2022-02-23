@@ -1,8 +1,8 @@
 import json
 
-from grocy import GrocyConfig, GrocyItem
-
 import requests
+
+from grocy import GrocyConfig
 
 
 class GrocyRecipe:
