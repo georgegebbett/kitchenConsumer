@@ -1,5 +1,5 @@
 PyYAML==6.0
 requests==2.27.1
-tkinterweb==3.10.7
-evdev==0.7.0
-tk-html-widgets==0.4.0
+tkinterweb
+evdev==1.4.0
+tk-html-widgets
