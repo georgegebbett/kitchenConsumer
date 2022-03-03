@@ -32,10 +32,24 @@ if test_mode:
 
 # open and read the config file
 with open(f'/home/pi/barcode/kitchenConsumer/{config_file_name}', 'r') as config:
-    try:
-        options = yaml.safe_load(config)
-    except yaml.YAMLError as err:
-        print(err)
+    options = yaml.safe_load(config)
+
+# set up Sentry
+use_sentry = options['sentry']['use_sentry']
+if use_sentry:
+    sentry_url = options['sentry']['url']
+    import sentry_sdk
+
+    sentry_sdk.init(
+        sentry_url,
+        traces_sample_rate=1.0
+    )
+
+
+def wrapped_sentry_report(error):
+    if use_sentry:
+        sentry_sdk.capture_exception(error)
+
 
 # set Grocy variables
 grocy_config = options['grocy']
@@ -73,7 +87,8 @@ def throw_exception():
 def get_hotkey_item(hotkey_position):
     try:
         return get_item_by_id(hotkey_items[hotkey_position[0]][hotkey_position[1]])
-    except IndexError:
+    except IndexError as err:
+        wrapped_sentry_report(err)
         return False
 
 
@@ -104,7 +119,8 @@ def barcode_buddy_scan(barcode: str):
         # print(res.json()["data"]["result"])
         if res.status_code == 200:
             return res.json()["data"]["result"]
-    except:
+    except Exception as e:
+        wrapped_sentry_report(e)
         return "Error decoding JSON, try again"
 
 
@@ -254,7 +270,8 @@ class ItemsPage(tk.Frame):
         print("Item page handler")
         try:
             self.key_mapping[code]()
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             hotkey_location = get_hotkey_location(code)
             if hotkey_location != -1:
                 self.handle_hotkey(hotkey_location)
@@ -325,7 +342,8 @@ class BbuddyQuantPrompt(tk.Frame):
         print("Bbuddy Quantity handler")
         try:
             self.append_char(self.numberCodes[code])
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             if code == 96:
                 self.submit_quantity()
             if code == 67:
@@ -404,7 +422,8 @@ class OptionPage(tk.Frame):
         self.quantity.set(code)
         try:
             self.key_mapping[code]()
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             do_nothing()
 
 
@@ -562,7 +581,8 @@ class MealPlanPage(tk.Frame):
         print("Meal plan page handler")
         try:
             self.key_mapping[code]()
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             do_nothing()
 
 
@@ -590,7 +610,8 @@ class ViewRecipePage(tk.Frame):
         print("Recipe page handler")
         try:
             self.key_mapping[code]()
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             do_nothing()
 
     def interpret_scan(self, key: str):
@@ -720,7 +741,8 @@ class ConsumeOptionsPage(tk.Frame):
         print("Consume option page handler")
         try:
             self.key_mapping[code]()
-        except KeyError:
+        except KeyError as e:
+            wrapped_sentry_report(e)
             if get_hotkey_item(get_hotkey_location(code)).id == self.item.id:
                 self.increase_quantity()
 
@@ -759,8 +781,8 @@ class ConsumeFailurePage(tk.Frame):
         print("Consume failure page handler")
         try:
             self.key_mapping[code]()
-        except KeyError:
-            pass
+        except KeyError as e:
+            wrapped_sentry_report(e)
 
     def on_raise(self):
         self.progress_bar["value"] = 0
